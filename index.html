@@ -1,0 +1,114 @@
+<html>
+	<head>
+		<style type="text/css">
+			body {
+				background-color: #000;
+				color: #fff;
+				font-family: arial,helvetica;
+				font-size: 5em;
+			}
+			.truths {
+				margin: 0px auto;
+				margin-top: 150px;
+				#width: 350px;
+				text-align: center;
+			}
+
+		</style>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+		<script type="text/javascript" src="./face-api.js"></script>
+		<script type="text/javascript">
+			// Make a fake video element the other modules can read from
+			let found_face = true;
+
+			function clamp(num, min, max) {
+				if (num < min) return min;
+				if (num > max) return max;
+				return num;
+			}
+
+
+			function getCurrentFaceDetectionNet() {
+				return faceapi.nets.ssdMobilenetv1
+			}
+
+			function isFaceDetectionModelLoaded() {
+				return !!getCurrentFaceDetectionNet().params
+			}
+
+			async function detecting() {
+				const video_element = document.getElementById('hidden-webcam-stream');
+
+				if (!video_element.paused || !video_element.ended || isFaceDetectionModelLoaded()) {
+					console.log('Attempting detection');
+					const results = await faceapi.detectAllFaces(
+						video_element, 
+						//new faceapi.TinyFaceDetectorOptions({ inputSize: 128, scoreThreshold: 0.5 })
+						new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 })
+					);
+
+					const current_found_face = (results.length > 0);
+
+
+					if (found_face == false && current_found_face == true) {
+						// Rising edge
+						console.log('Found face when none existed');
+					} else if (found_face == true && current_found_face == false) {
+						// Falling edge
+						console.log('All faces stopped existing');
+					}
+
+					found_face = current_found_face;
+				}
+			}
+
+			async function fading() {
+				const text_element =  document.getElementById('main-poem');
+
+				if (text_element.style.opacity === 0 && found_face) // We have a face and we've dissapeared
+					return;
+
+				if (text_element.style.opacity === 1 && !found_face) // We don't have a face and we reappeared
+					return;
+
+				const opacity = parseFloat(text_element.style.opacity);
+
+				if (!isNaN(opacity)) {
+					const delta = found_face ? -0.5 : 0.01;
+					text_element.style.opacity = clamp(opacity + delta, 0, 1);
+				} else {
+					text_element.style.opacity = 1;
+				}
+			}
+
+			$(document).ready(async function () {
+				const stream = await navigator.mediaDevices.getUserMedia({
+					video: {
+					}
+				});
+
+				// Load up ML model
+				await faceapi.loadSsdMobilenetv1Model('./models')
+				await faceapi.loadFaceLandmarkTinyModel('./models')
+				await faceapi.loadFaceLandmarkModel('./models')
+				await faceapi.loadFaceRecognitionModel('./models')
+				await faceapi.loadTinyFaceDetectorModel('./models')
+
+				const video_element = document.getElementById('hidden-webcam-stream');
+				video_element.srcObject = stream;
+
+				setInterval(detecting, 2000);
+				setInterval(   fading,  300);
+			});
+
+		</script>
+	</head>
+	<body>
+		<div id="main-poem" class="truths" style="opacity: 0">
+			<pre>Seeing is Understanding.</pre>
+			<pre>Understanding is Dissecting.</pre>
+			<pre>Dissection is Death.</pre>
+		</div>
+		<video id="hidden-webcam-stream"  style="opacity: 0" autoplay muted></video>
+	</body>
+</html>
